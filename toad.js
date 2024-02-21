@@ -70,7 +70,9 @@ program
   .command("holdings")
   .description("Display holdings")
   .action(() => {
-    console.log("all them holdings in this table:\nsomecoin - 500");
+    const select = db.prepare(`SELECT * FROM holdings`);
+    const rows = select.all();
+    console.log(rows);
   });
 
 program.command("transactions").description("Display transactions");
