@@ -37,6 +37,10 @@ program
   .description("Fund wallet with USD")
   .argument("value", "USD value to fund wallet with")
   .action((amount) => {
+    if (isNaN(Number(amount))) {
+      console.error("Invalid input for amount:", amount);
+      return;
+    }
     amount = Number(amount);
 
     const select = db.prepare(
@@ -49,7 +53,6 @@ program
         INSERT INTO holdings (ticker, amount)
         VALUES (?, ?)
       `);
-
       insert.run("USD", amount);
     } else {
       const update = db.prepare(`
@@ -57,12 +60,67 @@ program
         SET amount = ?
         WHERE ticker = ?
       `);
-
       update.run(amount + row.amount, "USD");
     }
   });
 
-program.command("buy").description("Buy ticker with USD");
+program
+  .command("buy")
+  .description("Buy ticker with USD")
+  .argument("ticker", "Coin ticker")
+  .argument("price", "Coin price")
+  .argument("amount", "Amount of coins purchased")
+  .action((ticker, price, amount) => {
+    ticker = ticker.toUpperCase();
+
+    if (isNaN(Number(price))) {
+      console.error("Invalid input for price:", price);
+      return;
+    }
+    price = Number(price);
+
+    if (isNaN(Number(amount))) {
+      console.error("Invalid input for amount:", amount);
+      return;
+    }
+    amount = Number(amount);
+
+    const total = price * amount;
+
+    console.log("ticker", ticker);
+    console.log("price", price);
+    console.log("amount", amount);
+
+    const select = db.prepare(
+      `SELECT id, amount FROM holdings WHERE ticker = ?`,
+    );
+    const row = select.get("USD");
+
+    if (row.amount < total) {
+      console.error(
+        `Not enough USD balance: need ${total}, have ${row.amount}`,
+      );
+    }
+
+    const updateHoldings = db.prepare(`
+        UPDATE holdings
+        SET amount = ?
+        WHERE ticker = ?
+      `);
+    updateHoldings.run(row.amount - total, "USD");
+
+    const insertHolding = db.prepare(`
+      INSERT INTO holdings (ticker, amount)
+      VALUES (?, ?)
+    `);
+    insertHolding.run(ticker, amount);
+
+    const insertTransaction = db.prepare(`
+      INSERT INTO transactions (pair, price, amount, total)
+      VALUES (?, ?, ?, ?)
+    `);
+    insertTransaction.run(`${ticker}/USD`, price, amount, total);
+  });
 
 program.command("sell").description("Sell ticker for USD");
 
