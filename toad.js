@@ -133,7 +133,14 @@ program
     console.log(rows);
   });
 
-program.command("transactions").description("Display transactions");
+program
+  .command("transactions")
+  .description("Display transactions")
+  .action(() => {
+    const select = db.prepare(`SELECT * FROM transactions`);
+    const rows = select.all();
+    console.log(rows);
+  });
 
 main((error) => {
   if (error) {
