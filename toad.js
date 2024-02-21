@@ -96,10 +96,16 @@ program
     );
     const row = select.get("USD");
 
+    if (!row) {
+      console.error(`You have no USD. Fund your wallet before trying again.`);
+      return;
+    }
+
     if (row.amount < total) {
       console.error(
         `Not enough USD balance: need ${total}, have ${row.amount}`,
       );
+      return;
     }
 
     const updateHoldings = db.prepare(`
@@ -116,13 +122,89 @@ program
     insertHolding.run(ticker, amount);
 
     const insertTransaction = db.prepare(`
-      INSERT INTO transactions (pair, price, amount, total)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO transactions (pair, side, price, amount, total)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    insertTransaction.run(`${ticker}/USD`, price, amount, total);
+    insertTransaction.run(`${ticker}/USD`, "BUY", price, amount, total);
+
+    console.log(
+      `Bought ${amount} ${ticker} at the price of ${price} for a total of ${total} USD.`,
+    );
   });
 
-program.command("sell").description("Sell ticker for USD");
+program
+  .command("sell")
+  .description("Sell ticker for USD")
+  .argument("ticker", "Coin ticker")
+  .argument("price", "Coin price")
+  .argument("amount", "Amount of coins sold")
+  .action((ticker, price, amount) => {
+    ticker = ticker.toUpperCase();
+
+    if (isNaN(Number(price))) {
+      console.error("Invalid input for price:", price);
+      return;
+    }
+    price = Number(price);
+
+    if (isNaN(Number(amount))) {
+      console.error("Invalid input for amount:", amount);
+      return;
+    }
+    amount = Number(amount);
+
+    const total = price * amount;
+
+    console.log("ticker", ticker);
+    console.log("price", price);
+    console.log("amount", amount);
+
+    const selectTicker = db.prepare(
+      `SELECT id, amount FROM holdings WHERE ticker = ?`,
+    );
+    const rowTicker = selectTicker.get(ticker);
+
+    if (!rowTicker) {
+      console.error(`You do not own any ${ticker}.`);
+      return;
+    }
+
+    if (rowTicker.amount < amount) {
+      console.error(
+        `Attempting to sell more ${ticker} than expected: tried ${amount}, have ${rowTicker.amount}`,
+      );
+      return;
+    }
+
+    const updateTickerHolding = db.prepare(`
+        UPDATE holdings
+        SET amount = ?
+        WHERE ticker = ?
+      `);
+    updateTickerHolding.run(rowTicker.amount - amount, ticker);
+
+    const selectUSD = db.prepare(
+      `SELECT id, amount FROM holdings WHERE ticker = ?`,
+    );
+    const rowUSD = selectUSD.get("USD");
+
+    const updateHoldingUSD = db.prepare(`
+        UPDATE holdings
+        SET amount = ?
+        WHERE ticker = ?
+      `);
+    updateHoldingUSD.run(rowUSD.amount + total, "USD");
+
+    const insertTransaction = db.prepare(`
+      INSERT INTO transactions (pair, side, price, amount, total)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    insertTransaction.run(`${ticker}/USD`, "SELL", price, amount, total);
+
+    console.log(
+      `Sold ${amount} ${ticker} at the price of ${price} for a total of ${total} USD.`,
+    );
+  });
 
 program
   .command("holdings")
